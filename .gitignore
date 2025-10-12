@@ -1,0 +1,35 @@
+# Build directories
+/build/
+dist/
+*.egg-info/
+*.whl
+
+# CMake build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+install_manifest.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VSCode / CLion / IDE configs
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*.log
+*.out
+
+# Backup / temp
+*~
+*.swp
