@@ -1,0 +1,22 @@
+[build-system]
+requires = ["scikit-build-core>=0.10.0", "pybind11>=2.12.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pixfoundry"
+version = "0.0.1"
+description = "PixFoundry: lightweight image IO via stb (C++ core with pybind11)"
+readme = "README.rst"
+requires-python = ">=3.8"
+authors = [{ name = "wei0107" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[tool.scikit-build]
+# 可用預設；這幾行只是讓路徑更穩定
+cmake.verbose = true
+build-dir = "_skbuild"     # 生成的暫存/產物會放這裡

@@ -1,10 +1,11 @@
-# Build directories
+# ---- builds & wheels ----
 /build/
-dist/
+/_skbuild/
+/dist/
+/*.whl
 *.egg-info/
-*.whl
 
-# CMake build artifacts
+# ---- CMake ----
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
@@ -12,24 +13,38 @@ Makefile
 *.cmake
 install_manifest.txt
 
-# Python cache
+# ---- Python caches ----
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# VSCode / CLion / IDE configs
-.vscode/
-.idea/
+# ---- Compiled extensions ----
+#（若未來真的需要提交二進位，刪掉這條）
+*.so
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# 只想更精準地忽略本包的擴充模組，可改用：
+# pixfoundry/_core*.so
 
-# Test outputs
+# ---- Test & tooling ----
+.pytest_cache/
+.coverage
+htmlcov/
 *.log
 *.out
 
-# Backup / temp
-*~
-*.swp
+# ---- IDE ----
+.vscode/
+.idea/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Local env ----
+.venv/
+env/
+venv/
+
+# ---- Project outputs ----
+images_example/output/
