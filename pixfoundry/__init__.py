@@ -1,1 +1,1 @@
-from ._core import load_image, save_image
+from ._core import load_image, save_image, mean_filter, gaussian_filter
