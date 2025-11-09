@@ -1,62 +1,97 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include <cstring>
 #include "pixfoundry/image.hpp"
+#include <vector>
+#include <cstdint> 
 
 namespace py = pybind11;
-using pf::ImageU8;
+using namespace pf;
 
-static py::array_t<uint8_t> to_numpy(const ImageU8& img) {
-    const int h = img.height(), w = img.width(), c = img.channels();
+// 將 ImageU8 零拷貝包成 numpy.ndarray（附帶 capsule 以延長 shared_ptr 生命週期）
+static py::array imageu8_to_numpy(const ImageU8& img)
+{
+    const int h = img.h();
+    const int w = img.w();
+    const int c = img.c();
+
+    if (img.empty())
+        throw std::runtime_error("Image is empty");
+
+    // 形狀與步幅（C 連續）
+    std::vector<ssize_t> shape;
+    std::vector<ssize_t> strides;
+
     if (c == 1) {
-        py::array_t<uint8_t> arr({h, w});
-        std::memcpy(arr.mutable_data(), img.data(), static_cast<size_t>(h) * w);
-        return arr;
+        shape   = { h, w };
+        strides = { static_cast<ssize_t>(w), 1 };
     } else {
-        py::array_t<uint8_t> arr({h, w, 3});
-        std::memcpy(arr.mutable_data(), img.data(), static_cast<size_t>(h) * w * 3);
-        return arr;
+        shape   = { h, w, c };
+        strides = { static_cast<ssize_t>(w * c), static_cast<ssize_t>(c), 1 };
     }
+
+    // 建一個 capsule，裡面放一個 new 出來的 shared_ptr 副本：
+    // 當 numpy 物件被 GC 掉時，capsule 會被析構，shared_ptr 計數-1，
+    // 原本在 C++ 的 shared_ptr 就能一起管理生命週期（零拷貝）
+    auto sp_copy = new std::shared_ptr<uint8_t[]>(img.shared());
+    py::capsule base(sp_copy, [](void *p){
+        delete reinterpret_cast<std::shared_ptr<uint8_t[]>*>(p);
+    });
+
+    return py::array(
+        py::dtype::of<uint8_t>(),
+        shape,
+        strides,
+        img.shared().get(), // data pointer
+        base                 // base to keep memory alive
+    );
 }
 
-static ImageU8 from_numpy(const py::array& arr) {
-    if (arr.dtype().kind() != 'u' || arr.dtype().itemsize() != 1)
-        throw std::runtime_error("Expect uint8 numpy array");
+static py::array load_image_py(const std::string& path)
+{
+    ImageU8 im = load_image_u8(path);  // 零拷貝從 stb → ImageU8
+    return imageu8_to_numpy(im);       // 再零拷貝包成 numpy
+}
 
-    if (arr.ndim() == 2) {
-        const int h = static_cast<int>(arr.shape(0));
-        const int w = static_cast<int>(arr.shape(1));
-        ImageU8 img(h, w, 1);
-        auto info = arr.request();
-        const auto* src = static_cast<const uint8_t*>(info.ptr);
-        std::copy(src, src + static_cast<size_t>(h) * w, img.data());
-        return img;
-    } else if (arr.ndim() == 3 && arr.shape(2) == 3) {
-        const int h = static_cast<int>(arr.shape(0));
-        const int w = static_cast<int>(arr.shape(1));
-        ImageU8 img(h, w, 3);
-        auto info = arr.request();
-        const auto* src = static_cast<const uint8_t*>(info.ptr);
-        std::copy(src, src + static_cast<size_t>(h) * w * 3, img.data());
-        return img;
+static void save_image_py(const std::string& path, py::array array)
+{
+    // 接受 HxW 或 HxWxC（C 要是 1 或 3）
+    py::buffer_info info = array.request();
+    if (info.ndim != 2 && info.ndim != 3)
+        throw std::runtime_error("save_image expects HxW or HxWxC array");
+
+    if (info.itemsize != 1)
+        throw std::runtime_error("save_image expects dtype=uint8");
+
+    int h = static_cast<int>(info.shape[0]);
+    int w = static_cast<int>(info.shape[1]);
+    int c = (info.ndim == 3) ? static_cast<int>(info.shape[2]) : 1;
+
+    if (c != 1 && c != 3)
+        throw std::runtime_error("save_image expects 1 or 3 channels");
+
+    // 檢查是否 C 連續（簡單檢查）
+    if (info.ndim == 2) {
+        // HxW: strides = [W, 1]
+        if (!(info.strides[0] == static_cast<ssize_t>(w) && info.strides[1] == 1))
+            throw std::runtime_error("save_image expects a contiguous array");
+    } else {
+        // HxWxC: strides = [W*C, C, 1]
+        if (!(info.strides[0] == static_cast<ssize_t>(w * c) &&
+              info.strides[1] == static_cast<ssize_t>(c) &&
+              info.strides[2] == 1))
+            throw std::runtime_error("save_image expects a contiguous array");
     }
-    throw std::runtime_error("Expect shape (H,W) or (H,W,3) uint8 array");
+
+    auto* ptr = static_cast<const uint8_t*>(info.ptr);
+    save_image_u8(path, ptr, h, w, c);
 }
 
 PYBIND11_MODULE(_core, m) {
-    m.doc() = "PixFoundry: image IO via stb_image/stb_image_write";
+    m.doc() = "PixFoundry core (zero-copy IO)";
 
-    m.def("load_image",
-          [](const std::string& path) {
-              return to_numpy(pf::load_image(path));
-          },
-          py::arg("path"),
-          "Load image (JPG/PNG/BMP/PSD/GIF/HDR/PIC/PNM) via stb.");
+    m.def("load_image", &load_image_py,
+          "Load image as numpy.ndarray (uint8, HxW or HxWx3) with zero-copy.");
 
-    m.def("save_image",
-          [](const std::string& path, const py::array& arr, int quality) {
-              pf::save_image(path, from_numpy(arr), quality);
-          },
-          py::arg("path"), py::arg("array"), py::arg("quality") = 90,
-          "Save image (PNG/JPG/BMP/TGA) via stb. 'quality' is used for JPG.");
+    m.def("save_image", &save_image_py,
+          "Save numpy.ndarray (uint8, HxW or HxWx3) to file (.png/.jpg).");
 }
