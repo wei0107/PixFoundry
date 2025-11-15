@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 namespace pf {
 
@@ -168,6 +169,127 @@ ImageU8 gaussian_filter(const ImageU8& src, float sigma,
 {
     auto kernel = gaussian_kernel1d(sigma);
     return convolve_separable_u8(src, kernel, border, border_value);
+}
+
+// ------------------------------------------------------------
+//  Median filter (naive implementation)
+// ------------------------------------------------------------
+ImageU8 median_filter(const ImageU8& src, int ksize,
+                      Border border, Backend, uint8_t border_value)
+{
+    if (src.empty()) {
+        throw std::invalid_argument("median_filter: src empty");
+    }
+    if (ksize < 3 || (ksize % 2 == 0)) {
+        throw std::invalid_argument("median_filter: ksize must be odd >= 3");
+    }
+
+    const int H = src.h(), W = src.w(), C = src.c();
+    const int R = ksize / 2;
+
+    ImageU8 dst(H, W, C);
+    const int window_size = ksize * ksize;
+    std::vector<uint8_t> window;
+    window.reserve(window_size);
+
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            for (int c = 0; c < C; ++c) {
+
+                window.clear();
+                for (int dy = -R; dy <= R; ++dy) {
+                    for (int dx = -R; dx <= R; ++dx) {
+                        uint8_t v = sample_u8(src, y + dy, x + dx, c, border, border_value);
+                        window.push_back(v);
+                    }
+                }
+
+                // 取中位數：O(k^2) nth_element
+                auto mid_it = window.begin() + window.size() / 2;
+                std::nth_element(window.begin(), mid_it, window.end());
+                uint8_t med = *mid_it;
+
+                dst.data()[((y * W + x) * C) + c] = med;
+            }
+        }
+    }
+
+    return dst;
+}
+
+// ------------------------------------------------------------
+//  Bilateral filter (naive, per-channel)
+// ------------------------------------------------------------
+ImageU8 bilateral_filter(const ImageU8& src,
+                         int ksize,
+                         float sigma_color,
+                         float sigma_space,
+                         Border border, Backend, uint8_t border_value)
+{
+    if (src.empty()) {
+        throw std::invalid_argument("bilateral_filter: src empty");
+    }
+    if (ksize < 3 || (ksize % 2 == 0)) {
+        throw std::invalid_argument("bilateral_filter: ksize must be odd >= 3");
+    }
+    if (!(sigma_color > 0.f) || !(sigma_space > 0.f)) {
+        throw std::invalid_argument("bilateral_filter: sigma_color and sigma_space must be > 0");
+    }
+
+    const int H = src.h(), W = src.w(), C = src.c();
+    const int R = ksize / 2;
+
+    const float inv2_sigma_space2 = 1.0f / (2.0f * sigma_space * sigma_space);
+    const float inv2_sigma_color2 = 1.0f / (2.0f * sigma_color * sigma_color);
+
+    ImageU8 dst(H, W, C);
+
+    // 可選：預先算好空間權重
+    std::vector<float> spatial_weight(ksize * ksize);
+    for (int dy = -R; dy <= R; ++dy) {
+        for (int dx = -R; dx <= R; ++dx) {
+            const float dsq = float(dx * dx + dy * dy);
+            float w = std::exp(-dsq * inv2_sigma_space2);
+            spatial_weight[(dy + R) * ksize + (dx + R)] = w;
+        }
+    }
+
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            for (int c = 0; c < C; ++c) {
+
+                uint8_t center_u8 = sample_u8(src, y, x, c, border, border_value);
+                float center = static_cast<float>(center_u8);
+
+                float norm = 0.f;
+                float acc  = 0.f;
+
+                for (int dy = -R; dy <= R; ++dy) {
+                    for (int dx = -R; dx <= R; ++dx) {
+                        int idx = (dy + R) * ksize + (dx + R);
+                        float w_spatial = spatial_weight[idx];
+
+                        uint8_t neigh_u8 = sample_u8(src, y + dy, x + dx, c, border, border_value);
+                        float neigh = static_cast<float>(neigh_u8);
+
+                        float diff = neigh - center;
+                        float w_range = std::exp(-(diff * diff) * inv2_sigma_color2);
+
+                        float w = w_spatial * w_range;
+
+                        norm += w;
+                        acc  += w * neigh;
+                    }
+                }
+
+                float out = (norm > 0.f) ? (acc / norm) : center;
+                out = std::clamp(std::round(out), 0.f, 255.f);
+                dst.data()[((y * W + x) * C) + c] = static_cast<uint8_t>(out);
+            }
+        }
+    }
+
+    return dst;
 }
 
 } // namespace pf

@@ -238,4 +238,52 @@ PYBIND11_MODULE(_core, m) {
           py::arg("border") = "reflect",
           py::arg("border_value") = 0,
           "Gaussian blur with selectable backend/border.");
+     // median_filter
+    m.def("median_filter",
+          [](const py::array& src,
+             int ksize,
+             const std::string& backend,
+             const std::string& border,
+             uint8_t border_value)
+          {
+              return wrap_filter(
+                  src, ksize, backend, border, border_value,
+                  [](const ImageU8& in, int k,
+                     Border b, Backend be, uint8_t bv) {
+                      return pf::median_filter(in, k, b, be, bv);
+                  });
+          },
+          py::arg("img"),
+          py::arg("ksize"),
+          py::arg("backend") = "auto",
+          py::arg("border")  = "reflect",
+          py::arg("border_value") = 0,
+          "Median filter with selectable backend/border.");
+
+    // bilateral_filter
+    m.def("bilateral_filter",
+          [](const py::array& src,
+             int ksize,
+             float sigma_color,
+             float sigma_space,
+             const std::string& backend,
+             const std::string& border,
+             uint8_t border_value)
+          {
+              ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+              Border  b   = parse_border(border);
+              Backend be  = parse_backend(backend);
+              ImageU8 out = pf::bilateral_filter(in, ksize,
+                                                 sigma_color, sigma_space,
+                                                 b, be, border_value);
+              return imageu8_to_numpy(out);
+          },
+          py::arg("img"),
+          py::arg("ksize"),
+          py::arg("sigma_color"),
+          py::arg("sigma_space"),
+          py::arg("backend") = "auto",
+          py::arg("border")  = "reflect",
+          py::arg("border_value") = 0,
+          "Bilateral filter with selectable backend/border.");
 }
