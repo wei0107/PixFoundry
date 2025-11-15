@@ -16,6 +16,7 @@ FetchContent_MakeAvailable(pybind11)
 pybind11_add_module(_core
   python/bindings.cpp
   src/core.cpp
+  src/filters.cpp
 )
 
 target_include_directories(_core
