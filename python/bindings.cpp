@@ -4,15 +4,15 @@
 #include "pixfoundry/image.hpp"
 #include "pixfoundry/filters.hpp"
 
-#include <vector>
 #include <cstdint>
-#include <string>
-#include <stdexcept>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace py = pybind11;
 
-namespace pfpy {  // 避免把 pf 的名字直接拉到全域
+namespace pfpy {
 
 using pf::ImageU8;
 using pf::Border;
@@ -20,7 +20,6 @@ using pf::Backend;
 
 // ------------------------------------------------------------
 // 共用：檢查 numpy array (uint8, C-contiguous, HxW or HxWxC)
-// 回傳 (h, w, c)
 // ------------------------------------------------------------
 struct ShapeInfo {
     int h;
@@ -125,7 +124,7 @@ static py::array imageu8_to_numpy(const ImageU8& img) {
 }
 
 // ------------------------------------------------------------
-// 檔案 I/O 包裝
+// 檔案 I/O 包裝（load/save 本身也零拷貝）
 // ------------------------------------------------------------
 static py::array load_image_py(const std::string& path) {
     ImageU8 im = pf::load_image_u8(path);
@@ -158,7 +157,7 @@ static Backend parse_backend(const std::string& s) {
 }
 
 // ------------------------------------------------------------
-// 綁定 filter：共用模板（避免重複 lambda）
+// 共用 wrap：把 numpy 轉 ImageU8 → 呼叫 C++ filter → 再轉回 numpy
 // ------------------------------------------------------------
 template <typename FilterFunc, typename ParamT>
 static py::array wrap_filter(
@@ -169,22 +168,22 @@ static py::array wrap_filter(
     uint8_t border_value,
     FilterFunc&& func)
 {
-    ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+    ImageU8 in  = numpy_to_imageu8_zero_copy(src);  // 這裡是零拷貝
     Border  b   = parse_border(border_str);
     Backend be  = parse_backend(backend_str);
     ImageU8 out = func(in, param, b, be, border_value);
-    return imageu8_to_numpy(out);
+    return imageu8_to_numpy(out);                   // 這裡也是零拷貝
 }
 
 } // namespace pfpy
 
 // ------------------------------------------------------------
-// PYBIND11 module
+// pybind11 module
 // ------------------------------------------------------------
 PYBIND11_MODULE(_core, m) {
-    m.doc() = "PixFoundry core (zero-copy image IO + filters)";
-
     using namespace pfpy;
+
+    m.doc() = "PixFoundry core (zero-copy image IO + filters)";
 
     // Image IO
     m.def("load_image", &load_image_py,
@@ -235,7 +234,56 @@ PYBIND11_MODULE(_core, m) {
           py::arg("img"),
           py::arg("sigma"),
           py::arg("backend") = "auto",
-          py::arg("border") = "reflect",
+          py::arg("border")  = "reflect",
           py::arg("border_value") = 0,
-          "Gaussian blur with selectable backend/border.");
+          "Gaussian filter with selectable backend/border.");
+
+    // median_filter
+    m.def("median_filter",
+          [](const py::array& src,
+             int ksize,
+             const std::string& backend,
+             const std::string& border,
+             uint8_t border_value)
+          {
+              return wrap_filter(
+                  src, ksize, backend, border, border_value,
+                  [](const ImageU8& in, int k,
+                     Border b, Backend be, uint8_t bv) {
+                      return pf::median_filter(in, k, b, be, bv);
+                  });
+          },
+          py::arg("img"),
+          py::arg("ksize"),
+          py::arg("backend") = "auto",
+          py::arg("border")  = "reflect",
+          py::arg("border_value") = 0,
+          "Median filter with selectable backend/border.");
+
+    // bilateral_filter（參數比較多，就不套 wrap_filter 模板了）
+    m.def("bilateral_filter",
+          [](const py::array& src,
+             int ksize,
+             float sigma_color,
+             float sigma_space,
+             const std::string& backend,
+             const std::string& border,
+             uint8_t border_value)
+          {
+              ImageU8 in  = numpy_to_imageu8_zero_copy(src);  // zero-copy in
+              Border  b   = parse_border(border);
+              Backend be  = parse_backend(backend);
+              ImageU8 out = pf::bilateral_filter(in, ksize,
+                                                 sigma_color, sigma_space,
+                                                 b, be, border_value);
+              return imageu8_to_numpy(out);                   // zero-copy out
+          },
+          py::arg("img"),
+          py::arg("ksize"),
+          py::arg("sigma_color"),
+          py::arg("sigma_space"),
+          py::arg("backend") = "auto",
+          py::arg("border")  = "reflect",
+          py::arg("border_value") = 0,
+          "Bilateral filter with selectable backend/border.");
 }
