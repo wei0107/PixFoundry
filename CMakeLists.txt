@@ -17,6 +17,7 @@ pybind11_add_module(_core
   python/bindings.cpp
   src/core.cpp
   src/filters.cpp
+  src/color.cpp
 )
 
 target_include_directories(_core

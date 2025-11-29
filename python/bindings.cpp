@@ -3,7 +3,7 @@
 
 #include "pixfoundry/image.hpp"
 #include "pixfoundry/filters.hpp"
-
+#include "pixfoundry/color.hpp"
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -286,4 +286,82 @@ PYBIND11_MODULE(_core, m) {
           py::arg("border")  = "reflect",
           py::arg("border_value") = 0,
           "Bilateral filter with selectable backend/border.");
+
+
+    // -------------------- Color & tone (Week4) --------------------
+    m.def(
+        "to_grayscale",
+        [](const py::array& src,
+           const std::string& backend) {
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::to_grayscale(in, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("backend") = "auto",
+        "Convert RGB image to grayscale (returns HxW array)."
+    );
+
+    m.def(
+        "invert",
+        [](const py::array& src,
+           const std::string& backend) {
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::invert(in, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("backend") = "auto",
+        "Invert pixel values: v -> 255 - v."
+    );
+
+    m.def(
+        "sepia",
+        [](const py::array& src,
+           const std::string& backend) {
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::sepia(in, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("backend") = "auto",
+        "Apply sepia tone effect (RGB only)."
+    );
+
+    m.def(
+        "adjust_brightness_contrast",
+        [](const py::array& src,
+           float alpha,
+           float beta,
+           const std::string& backend) {
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::adjust_brightness_contrast(in, alpha, beta, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("alpha"),
+        py::arg("beta"),
+        py::arg("backend") = "auto",
+        "Adjust brightness and contrast: new = alpha * old + beta."
+    );
+
+    m.def(
+        "gamma_correct",
+        [](const py::array& src,
+           float gamma,
+           const std::string& backend) {
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::gamma_correct(in, gamma, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("gamma"),
+        py::arg("backend") = "auto",
+        "Gamma correction: new = 255 * (old/255)^gamma."
+    );
 }
