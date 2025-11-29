@@ -50,7 +50,7 @@ public:
     const std::shared_ptr<uint8_t[]>& shared() const { return data_; }
 
 private:
-    int h_ = 0, w_ = 0, c_ = 1;
+    size_t h_ = 0, w_ = 0, c_ = 1;
     std::shared_ptr<uint8_t[]> data_;
 };
 
