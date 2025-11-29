@@ -4,6 +4,7 @@
 #include "pixfoundry/image.hpp"
 #include "pixfoundry/filters.hpp"
 #include "pixfoundry/color.hpp"
+#include "pixfoundry/effects.hpp"
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -363,5 +364,64 @@ PYBIND11_MODULE(_core, m) {
         py::arg("gamma"),
         py::arg("backend") = "auto",
         "Gamma correction: new = 255 * (old/255)^gamma."
+    );
+
+    // -------------------- Effects (Week5) --------------------
+    m.def(
+        "sharpen",
+        [](const py::array& src,
+           float amount,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::sharpen(in, amount, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("amount") = 1.0f,
+        py::arg("backend") = "auto",
+        "Sharpen the image with a simple 3x3 kernel."
+    );
+
+    m.def(
+        "emboss",
+        [](const py::array& src,
+           float strength,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::emboss(in, strength, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("strength") = 1.0f,
+        py::arg("backend") = "auto",
+        "Emboss effect to give a relief-style shading."
+    );
+
+    m.def(
+        "cartoonize",
+        [](const py::array& src,
+           float sigma_space,
+           int edge_threshold,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::cartoonize(
+                in,
+                sigma_space,
+                static_cast<std::uint8_t>(edge_threshold),
+                be
+            );
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("sigma_space") = 2.0f,
+        py::arg("edge_threshold") = 40,
+        py::arg("backend") = "auto",
+        "Simple cartoon effect: smooth + edge lines + color quantization."
     );
 }
