@@ -1,1 +1,1 @@
-from ._core import load_image, save_image, mean_filter, gaussian_filter, median_filter, bilateral_filter, to_grayscale, invert, sepia, adjust_brightness_contrast,gamma_correct, sharpen, emboss, cartoonize
+from ._core import load_image, save_image, mean_filter, gaussian_filter, median_filter, bilateral_filter, to_grayscale, invert, sepia, adjust_brightness_contrast,gamma_correct, sharpen, emboss, cartoonize, resize, flip_horizontal, flip_vertical, crop, rotate

@@ -19,6 +19,7 @@ pybind11_add_module(_core
   src/filters.cpp
   src/color.cpp
   src/effects.cpp
+  src/geometry.cpp
 )
 
 target_include_directories(_core
