@@ -19,14 +19,14 @@ def test_geometry_basic():
     h, w = img.shape[:2]
 
     # resize 測試
-    resized = pf.resize(img, height=h // 2, width=w // 2)
+    resized = pf.resize(img, height=h // 2, width=w // 2, backend="openmp")
     assert resized.shape[0] == h // 2
     assert resized.shape[1] == w // 2
     pf.save_image(os.path.join(out_dir, "week6_resize.jpg"), resized)
 
     # flip 測試
-    flip_h = pf.flip_horizontal(img)
-    flip_v = pf.flip_vertical(img)
+    flip_h = pf.flip_horizontal(img, backend="openmp")
+    flip_v = pf.flip_vertical(img, backend="openmp")
     assert flip_h.shape == img.shape
     assert flip_v.shape == img.shape
     pf.save_image(os.path.join(out_dir, "week6_flip_h.jpg"), flip_h)
@@ -35,13 +35,13 @@ def test_geometry_basic():
     # crop 測試
     ch = h // 2
     cw = w // 2
-    crop_img = pf.crop(img, y=h // 4, x=w // 4, height=ch, width=cw)
+    crop_img = pf.crop(img, y=h // 4, x=w // 4, height=ch, width=cw, backend="openmp")
     assert crop_img.shape[0] == ch
     assert crop_img.shape[1] == cw
     pf.save_image(os.path.join(out_dir, "week6_crop.jpg"), crop_img)
 
     # rotate 測試
-    rot = pf.rotate(img, angle_deg=30.0)
+    rot = pf.rotate(img, angle_deg=30.0, backend="openmp")
     assert rot.shape == img.shape
     pf.save_image(os.path.join(out_dir, "week6_rotate_30.jpg"), rot)
 
