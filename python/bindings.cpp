@@ -5,6 +5,7 @@
 #include "pixfoundry/filters.hpp"
 #include "pixfoundry/color.hpp"
 #include "pixfoundry/effects.hpp"
+#include "pixfoundry/geometry.hpp"
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -152,8 +153,15 @@ static Border parse_border(const std::string& s) {
 }
 
 static Backend parse_backend(const std::string& s) {
-    if (s == "auto")   return Backend::Auto;
+    if (s == "auto") {
+    #ifdef PF_HAS_OPENMP
+        return Backend::OpenMP;
+    #else
+        return Backend::Single;
+    #endif
+    }
     if (s == "single") return Backend::Single;
+    if (s == "openmp" || s == "omp") return Backend::OpenMP;
     throw std::runtime_error("backend must be one of: auto, single");
 }
 
@@ -423,5 +431,97 @@ PYBIND11_MODULE(_core, m) {
         py::arg("edge_threshold") = 40,
         py::arg("backend") = "auto",
         "Simple cartoon effect: smooth + edge lines + color quantization."
+    );
+
+    // ------------------------------------------------------------
+    // Geometry (Week6)
+    // ------------------------------------------------------------
+    m.def(
+        "resize",
+        [](const py::array& src,
+           int new_h,
+           int new_w,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::resize(in, new_h, new_w, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("height"),
+        py::arg("width"),
+        py::arg("backend") = "auto",
+        "Resize image to (height, width) using bilinear interpolation."
+    );
+
+    m.def(
+        "flip_horizontal",
+        [](const py::array& src,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::flip_horizontal(in, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("backend") = "auto",
+        "Flip image horizontally."
+    );
+
+    m.def(
+        "flip_vertical",
+        [](const py::array& src,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::flip_vertical(in, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("backend") = "auto",
+        "Flip image vertically."
+    );
+
+    m.def(
+        "crop",
+        [](const py::array& src,
+           int y,
+           int x,
+           int h,
+           int w,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::crop(in, y, x, h, w, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("y"),
+        py::arg("x"),
+        py::arg("height"),
+        py::arg("width"),
+        py::arg("backend") = "auto",
+        "Crop a (height, width) region starting from (y, x)."
+    );
+
+    m.def(
+        "rotate",
+        [](const py::array& src,
+           float angle_deg,
+           const std::string& backend) {
+            using namespace pfpy;
+            ImageU8 in  = numpy_to_imageu8_zero_copy(src);
+            Backend be  = parse_backend(backend);
+            ImageU8 out = pf::rotate(in, angle_deg, be);
+            return imageu8_to_numpy(out);
+        },
+        py::arg("img"),
+        py::arg("angle_deg"),
+        py::arg("backend") = "auto",
+        "Rotate image by angle_deg (center-based), output size same as input."
     );
 }

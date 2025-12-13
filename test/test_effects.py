@@ -18,17 +18,17 @@ def test_effects_basic():
     assert img.dtype == np.uint8
 
     # Sharpen
-    sharp = pf.sharpen(img, amount=1.0, backend="auto")
+    sharp = pf.sharpen(img, amount=1.0, backend="openmp")
     assert sharp.shape == img.shape
     pf.save_image(os.path.join(out_dir, "week5_sharpen.png"), sharp)
 
     # Emboss
-    emb = pf.emboss(img, strength=1.0, backend="auto")
+    emb = pf.emboss(img, strength=1.0, backend="openmp")
     assert emb.shape == img.shape
     pf.save_image(os.path.join(out_dir, "week5_emboss.png"), emb)
 
     # Cartoonize
-    cart = pf.cartoonize(img, sigma_space=2.0, edge_threshold=40, backend="auto")
+    cart = pf.cartoonize(img, sigma_space=2.0, edge_threshold=40, backend="openmp")
     assert cart.shape == img.shape
     pf.save_image(os.path.join(out_dir, "week5_cartoon.png"), cart)
 

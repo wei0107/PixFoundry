@@ -94,13 +94,13 @@ def test_filters_week3():
     # 1. 雙邊濾波（測試對象）
     den_bil = pf.bilateral_filter(
         gauss_noisy, KSIZE, SIGMA_BIL_COLOR, SIGMA_BIL_SPACE, 
-        border="reflect", border_value=0
+        border="reflect", border_value=0, backend="openmp"
     )
     
     # 2. 標準高斯濾波（對照組：會模糊邊緣）
     den_gauss_ctrl = pf.gaussian_filter(
         gauss_noisy, SIGMA_BIL_SPACE, # 使用相同的 sigma_space
-        border="reflect", border_value=0
+        border="reflect", border_value=0, backend="openmp"
     )
 
     pf.save_image(os.path.join(out_dir, "week3_bilateral_gauss.png"), den_bil)

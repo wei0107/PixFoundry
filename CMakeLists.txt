@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 project(pixfoundry LANGUAGES CXX)
-
+find_package(OpenMP)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -19,7 +19,15 @@ pybind11_add_module(_core
   src/filters.cpp
   src/color.cpp
   src/effects.cpp
+  src/geometry.cpp
 )
+
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(_core PRIVATE OpenMP::OpenMP_CXX)
+  target_compile_definitions(_core PRIVATE PF_HAS_OPENMP=1)
+else()
+  message(WARNING "OpenMP not found; building without OpenMP backend")
+endif()
 
 target_include_directories(_core
   PRIVATE

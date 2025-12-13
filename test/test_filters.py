@@ -22,11 +22,17 @@ def test_filters_basic():
         out1 = pf.mean_filter(img, 15, backend="auto", border=border, border_value=0)
         assert out1.dtype == np.uint8
         assert out1.shape == img.shape
+        out3 = pf.mean_filter(img, 15, backend="openmp", border=border, border_value=0)
+        assert out3.dtype == np.uint8
+        assert out3.shape == img.shape
 
         # gaussian
         out2 = pf.gaussian_filter(img, 2.5, backend="single", border=border, border_value=0)
         assert out2.dtype == np.uint8
         assert out2.shape == img.shape
+        out4 = pf.gaussian_filter(img, 2.5, backend="single", border=border, border_value=0)
+        assert out4.dtype == np.uint8
+        assert out4.shape == img.shape
 
         # 簡單數值檢查：濾波後不應該增加全域變異度（超粗略）
         def var(a): return float(np.var(a.astype(np.float32)))
@@ -41,6 +47,8 @@ def test_filters_basic():
         # 存檔，看一下視覺效果
         pf.save_image(os.path.join(out_dir, f"test_mean_{border}.png"), out1)
         pf.save_image(os.path.join(out_dir, f"test_gaussian_{border}.png"), out2)
+        pf.save_image(os.path.join(out_dir, f"test_mean_omp_{border}.png"), out3)
+        pf.save_image(os.path.join(out_dir, f"test_gaussian_omp_{border}.png"), out4)
 
     # 額外：用小圖精準測試 border="constant" 的行為
     small = np.zeros((1, 1), dtype=np.uint8)

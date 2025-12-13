@@ -20,10 +20,19 @@ enum class Border {
 // 後端（目前實作只用到 Single，但 bindings 有 "auto"）
 // ------------------------------------------------------------
 enum class Backend {
-    Auto,    // 給 Python 的 "auto" 用（目前你實作裡可以當成 Single 用）
-    Single,  // 單執行緒
-    // 之後如果要加 OpenMP 可以多加一個 OpenMP
+    Auto = 0,
+    Single = 1,
+    OpenMP = 2,
 };
+
+inline Backend normalize_backend(Backend b) {
+#ifdef PF_HAS_OPENMP
+    return b;
+#else
+    if (b == Backend::OpenMP) return Backend::Single;
+    return b;
+#endif
+}
 
 // 這個型別已經在 image.hpp 裡定義了：class ImageU8 {...};
 using std::uint8_t;
