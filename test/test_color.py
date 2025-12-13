@@ -21,7 +21,7 @@ def test_color_basic():
     assert img.dtype == np.uint8
 
     # 1. to_grayscale
-    gray = pf.to_grayscale(img)
+    gray = pf.to_grayscale(img, backend="openmp")
     assert gray.dtype == np.uint8
     if img.ndim == 2:
         # already grayscale: shape 應該維持一樣
@@ -34,28 +34,28 @@ def test_color_basic():
     pf.save_image(os.path.join(out_dir, "color_gray.png"), gray)
 
     # 2. invert
-    inv = pf.invert(img)
+    inv = pf.invert(img, backend="openmp")
     assert inv.dtype == np.uint8
     assert inv.shape == img.shape
     pf.save_image(os.path.join(out_dir, "color_invert.png"), inv)
 
     # 3. sepia（只支援 RGB）
     if img.ndim == 3 and img.shape[2] == 3:
-        sep = pf.sepia(img)
+        sep = pf.sepia(img, backend="openmp")
         assert sep.dtype == np.uint8
         assert sep.shape == img.shape
         pf.save_image(os.path.join(out_dir, "color_sepia.png"), sep)
 
     # 4. brightness / contrast
     #    alpha > 1: 對比增加, beta: 亮度偏移
-    bc = pf.adjust_brightness_contrast(img, alpha=1.2, beta=10.0)
+    bc = pf.adjust_brightness_contrast(img, alpha=1.2, beta=10.0, backend="openmp")
     assert bc.dtype == np.uint8
     assert bc.shape == img.shape
     pf.save_image(os.path.join(out_dir, "color_bc.png"), bc)
 
     # 5. gamma correction
     #    gamma < 1: 提亮; gamma > 1: 壓暗
-    gamma_img = pf.gamma_correct(img, gamma=0.8)
+    gamma_img = pf.gamma_correct(img, gamma=0.8, backend="openmp")
     assert gamma_img.dtype == np.uint8
     assert gamma_img.shape == img.shape
     pf.save_image(os.path.join(out_dir, "color_gamma_0_8.png"), gamma_img)
