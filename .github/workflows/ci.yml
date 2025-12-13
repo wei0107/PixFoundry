@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build
+
+      - name: Install Python deps
+        run: |
+          python -m pip install -U pip
+          python -m pip install -U numpy pytest pytest-cov opencv-python-headless
+          python -m pip install -e .
+
+      - name: Run tests (with coverage)
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 2
+        run: |
+          # 指定 test/，避免 pytest 去掃到 _skbuild/_deps/pybind11-src/tests
+          python -m pytest -q test \
+            --cov=pixfoundry \
+            --cov-report=term-missing \
+            --cov-report=xml
+
+      - name: Upload coverage.xml
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml-${{ matrix.python-version }}
+          path: coverage.xml
