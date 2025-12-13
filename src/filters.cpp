@@ -5,6 +5,10 @@
 #include <stdexcept>
 #include <vector>
 
+#ifdef PF_HAS_OPENMP
+#include <omp.h>
+#endif
+
 namespace pf {
 
 // ============================================================
@@ -174,33 +178,106 @@ static ImageU8 convolve_separable_u8(const ImageU8& src,
     return dst;
 }
 
+#ifdef PF_HAS_OPENMP
+static ImageU8 convolve_separable_u8_openmp(const ImageU8& src,
+                                            const std::vector<float>& k1d,
+                                            Border border,
+                                            uint8_t border_value)
+{
+    const int H = src.h();
+    const int W = src.w();
+    const int C = src.c();
+    const int R = static_cast<int>(k1d.size() / 2);
+
+    std::vector<float> tmp(static_cast<std::size_t>(H) * W * C, 0.f);
+    ImageU8 dst(H, W, C);
+
+    // horizontal pass
+#pragma omp parallel for collapse(2)
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            for (int c = 0; c < C; ++c) {
+                float sum = 0.f;
+                for (int t = -R; t <= R; ++t) {
+                    uint8_t v = sample_u8(src, y, x + t, c, border, border_value);
+                    sum += k1d[t + R] * static_cast<float>(v);
+                }
+                tmp[linear_index(y, x, c, W, C)] = sum;
+            }
+        }
+    }
+
+    // vertical pass
+#pragma omp parallel for collapse(2)
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            for (int c = 0; c < C; ++c) {
+                float sum = 0.f;
+                for (int t = -R; t <= R; ++t) {
+                    float v = sample_float(tmp, y + t, x, c, H, W, C, border, border_value);
+                    sum += k1d[t + R] * v;
+                }
+                float out = std::round(sum);
+                out = std::clamp(out, 0.f, 255.f);
+                dst.data()[linear_index(y, x, c, W, C)] = static_cast<uint8_t>(out);
+            }
+        }
+    }
+
+    return dst;
+}
+#endif
+
 // ============================================================
 // Public API
 // ============================================================
 
-ImageU8 mean_filter(const ImageU8& src,
-                    int ksize,
-                    Border border,
-                    Backend /*backend*/,
-                    uint8_t border_value) {
+ImageU8 mean_filter(const ImageU8& src, int ksize, Border border,
+                    Backend backend, uint8_t border_value)
+{
     auto kernel = box_kernel1d(ksize);
-    return convolve_separable_u8(src, kernel, border, border_value);
+
+    backend = normalize_backend(backend);
+    switch (backend) {
+    case Backend::OpenMP:
+#ifdef PF_HAS_OPENMP
+        return convolve_separable_u8_openmp(src, kernel, border, border_value);
+#else
+        return convolve_separable_u8(src, kernel, border, border_value);
+#endif
+    case Backend::Single:
+    case Backend::Auto:
+    default:
+        return convolve_separable_u8(src, kernel, border, border_value);
+    }
 }
 
-ImageU8 gaussian_filter(const ImageU8& src,
-                        float sigma,
-                        Border border,
-                        Backend /*backend*/,
-                        uint8_t border_value) {
+ImageU8 gaussian_filter(const ImageU8& src, float sigma, Border border,
+                        Backend backend, uint8_t border_value)
+{
     auto kernel = gaussian_kernel1d(sigma);
-    return convolve_separable_u8(src, kernel, border, border_value);
+
+    backend = normalize_backend(backend);
+    switch (backend) {
+    case Backend::OpenMP:
+#ifdef PF_HAS_OPENMP
+        return convolve_separable_u8_openmp(src, kernel, border, border_value);
+#else
+        return convolve_separable_u8(src, kernel, border, border_value);
+#endif
+    case Backend::Single:
+    case Backend::Auto:
+    default:
+        return convolve_separable_u8(src, kernel, border, border_value);
+    }
 }
 
 ImageU8 median_filter(const ImageU8& src,
                       int ksize,
                       Border border,
-                      Backend /*backend*/,
-                      uint8_t border_value) {
+                      Backend backend,
+                      uint8_t border_value)
+{
     if (src.empty()) {
         throw std::invalid_argument("median_filter: src empty");
     }
@@ -210,9 +287,56 @@ ImageU8 median_filter(const ImageU8& src,
 
     const int H = src.h(), W = src.w(), C = src.c();
     const int R = ksize / 2;
+    const int window_size = ksize * ksize;
 
     ImageU8 dst(H, W, C);
-    const int window_size = ksize * ksize;
+
+    backend = normalize_backend(backend);
+
+    switch (backend) {
+    case Backend::OpenMP:
+#ifdef PF_HAS_OPENMP
+    {
+        // 每個 thread 各自擁有 window，避免 data race
+        #pragma omp parallel
+        {
+            std::vector<uint8_t> window;
+            window.reserve(static_cast<std::size_t>(window_size));
+
+            #pragma omp for collapse(2) schedule(static)
+            for (int y = 0; y < H; ++y) {
+                for (int x = 0; x < W; ++x) {
+                    for (int c = 0; c < C; ++c) {
+
+                        window.clear();
+                        for (int dy = -R; dy <= R; ++dy) {
+                            for (int dx = -R; dx <= R; ++dx) {
+                                uint8_t v = sample_u8(src, y + dy, x + dx, c, border, border_value);
+                                window.push_back(v);
+                            }
+                        }
+
+                        auto mid_it = window.begin() + window.size() / 2;
+                        std::nth_element(window.begin(), mid_it, window.end());
+                        dst.data()[linear_index(y, x, c, W, C)] = *mid_it;
+                    }
+                }
+            }
+        }
+        return dst;
+    }
+#else
+        // 沒開 OpenMP 就退回 single
+        [[fallthrough]];
+#endif
+
+    case Backend::Single:
+    case Backend::Auto:
+    default:
+        break;
+    }
+
+    // single-thread fallback
     std::vector<uint8_t> window;
     window.reserve(static_cast<std::size_t>(window_size));
 
@@ -228,12 +352,9 @@ ImageU8 median_filter(const ImageU8& src,
                     }
                 }
 
-                // 取中位數：使用 nth_element, O(k^2)
                 auto mid_it = window.begin() + window.size() / 2;
                 std::nth_element(window.begin(), mid_it, window.end());
-                uint8_t med = *mid_it;
-
-                dst.data()[linear_index(y, x, c, W, C)] = med;
+                dst.data()[linear_index(y, x, c, W, C)] = *mid_it;
             }
         }
     }
@@ -246,8 +367,9 @@ ImageU8 bilateral_filter(const ImageU8& src,
                          float sigma_color,
                          float sigma_space,
                          Border border,
-                         Backend /*backend*/,
-                         uint8_t border_value) {
+                         Backend backend,
+                         uint8_t border_value)
+{
     if (src.empty()) {
         throw std::invalid_argument("bilateral_filter: src empty");
     }
@@ -266,7 +388,7 @@ ImageU8 bilateral_filter(const ImageU8& src,
 
     ImageU8 dst(H, W, C);
 
-    // 預先算好空間權重（跟顏色無關，只跟 dx, dy 有關）
+    // 空間權重可以共用（read-only）
     std::vector<float> spatial_weight(static_cast<std::size_t>(ksize) * ksize);
     for (int dy = -R; dy <= R; ++dy) {
         for (int dx = -R; dx <= R; ++dx) {
@@ -276,37 +398,61 @@ ImageU8 bilateral_filter(const ImageU8& src,
         }
     }
 
+    backend = normalize_backend(backend);
+
+    auto body = [&](int y, int x) {
+        for (int c = 0; c < C; ++c) {
+            uint8_t center_u8 = sample_u8(src, y, x, c, border, border_value);
+            float center = static_cast<float>(center_u8);
+
+            float norm = 0.f;
+            float acc  = 0.f;
+
+            for (int dy = -R; dy <= R; ++dy) {
+                for (int dx = -R; dx <= R; ++dx) {
+                    uint8_t neigh_u8 = sample_u8(src, y + dy, x + dx, c, border, border_value);
+                    float neigh = static_cast<float>(neigh_u8);
+
+                    float spatial = spatial_weight[(dy + R) * ksize + (dx + R)];
+                    float diff = neigh - center;
+                    float range = std::exp(-(diff * diff) * inv2_sigma_color2);
+
+                    float w = spatial * range;
+                    norm += w;
+                    acc  += w * neigh;
+                }
+            }
+
+            float out = (norm > 0.f) ? (acc / norm) : center;
+            out = std::clamp(std::round(out), 0.f, 255.f);
+            dst.data()[linear_index(y, x, c, W, C)] = static_cast<uint8_t>(out);
+        }
+    };
+
+    switch (backend) {
+    case Backend::OpenMP:
+#ifdef PF_HAS_OPENMP
+        #pragma omp parallel for collapse(2) schedule(static)
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                body(y, x);
+            }
+        }
+        return dst;
+#else
+        [[fallthrough]];
+#endif
+
+    case Backend::Single:
+    case Backend::Auto:
+    default:
+        break;
+    }
+
+    // single-thread fallback
     for (int y = 0; y < H; ++y) {
         for (int x = 0; x < W; ++x) {
-            for (int c = 0; c < C; ++c) {
-
-                uint8_t center_u8 = sample_u8(src, y, x, c, border, border_value);
-                float center = static_cast<float>(center_u8);
-
-                float norm = 0.f;
-                float acc  = 0.f;
-
-                for (int dy = -R; dy <= R; ++dy) {
-                    for (int dx = -R; dx <= R; ++dx) {
-                        uint8_t neigh_u8 = sample_u8(src, y + dy, x + dx, c, border, border_value);
-                        float neigh = static_cast<float>(neigh_u8);
-
-                        float dsq = static_cast<float>(dx * dx + dy * dy);
-                        float spatial = spatial_weight[(dy + R) * ksize + (dx + R)];
-
-                        float diff = neigh - center;
-                        float range = std::exp(-(diff * diff) * inv2_sigma_color2);
-
-                        float w = spatial * range;
-                        norm += w;
-                        acc  += w * neigh;
-                    }
-                }
-
-                float out = (norm > 0.f) ? (acc / norm) : center;
-                out = std::clamp(std::round(out), 0.f, 255.f);
-                dst.data()[linear_index(y, x, c, W, C)] = static_cast<uint8_t>(out);
-            }
+            body(y, x);
         }
     }
 

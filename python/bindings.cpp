@@ -153,8 +153,15 @@ static Border parse_border(const std::string& s) {
 }
 
 static Backend parse_backend(const std::string& s) {
-    if (s == "auto")   return Backend::Auto;
+    if (s == "auto") {
+    #ifdef PF_HAS_OPENMP
+        return Backend::OpenMP;
+    #else
+        return Backend::Single;
+    #endif
+    }
     if (s == "single") return Backend::Single;
+    if (s == "openmp" || s == "omp") return Backend::OpenMP;
     throw std::runtime_error("backend must be one of: auto, single");
 }
 
