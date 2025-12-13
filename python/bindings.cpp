@@ -524,4 +524,10 @@ PYBIND11_MODULE(_core, m) {
         py::arg("backend") = "auto",
         "Rotate image by angle_deg (center-based), output size same as input."
     );
+    // arr (numpy) -> ImageU8 (zero-copy) -> numpy (zero-copy)
+    m.def("_debug_zerocopy_roundtrip_u8", [](py::array arr) {
+        // 你已經有這兩個 helper：numpy_to_imageu8_zero_copy / imageu8_to_numpy
+        ImageU8 img = numpy_to_imageu8_zero_copy(arr);
+        return imageu8_to_numpy(img);
+    });
 }
