@@ -20,3 +20,7 @@ classifiers = [
 # 可用預設；這幾行只是讓路徑更穩定
 cmake.verbose = true
 build-dir = "_skbuild"     # 生成的暫存/產物會放這裡
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+addopts = "-q"
